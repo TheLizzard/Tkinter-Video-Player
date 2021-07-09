@@ -112,3 +112,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+# Testing files/folders
+src/sound.mp3
+src/vid.ts
