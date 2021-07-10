@@ -115,5 +115,4 @@ dmypy.json
 
 
 # Testing files/folders
-src/sound.mp3
-src/vid.ts
+src/tmp/

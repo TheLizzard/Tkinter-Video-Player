@@ -10,7 +10,8 @@ THICKNESS = 10   # Pixels
 
 class ProgressBar:
     def __init__(self, canvas:tk.Canvas, _max:int, callback=None,
-                 dragging_start_callback=None, dragging_end_callback=None):
+                 dragging_start_callback=None, dragging_end_callback=None,
+                 hide_cursor:bool=True):
         canvas.bind("<Configure>", None, add=True)
         canvas.bind("<Motion>", self.motion, add=True)
         canvas.bind("<Leave>", self.leave, add=True)
@@ -28,6 +29,7 @@ class ProgressBar:
         self.callback = callback
         self.dragging = False
         self.last_mouse_movement = 0
+        self.hide_cursor = hide_cursor
 
         width = int(self.canvas.winfo_width())
         height = int(self.canvas.winfo_height())
@@ -134,12 +136,16 @@ class ProgressBar:
             # Never hide the progressbar
             self.last_mouse_movement = float("inf")
         self.update_progressbar()
+        if self.hide_cursor:
+            self.canvas.config(cursor="")
 
     def hide(self, event:tk.Event=None) -> None:
         if (not self.shown) or self.dragging:
             return None
         self.shown = False
         self.canvas.itemconfigure("progressbar", state="hidden")
+        if self.hide_cursor:
+            self.canvas.config(cursor="none")
 
     @property
     def value(self) -> int:
