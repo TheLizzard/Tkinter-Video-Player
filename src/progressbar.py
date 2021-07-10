@@ -17,6 +17,10 @@ class ProgressBar:
         canvas.bind("<ButtonPress-1>", self.press, add=True)
         canvas.bind("<ButtonRelease-1>", self.release, add=True)
 
+        # No idea why this doesn't work:
+        # canvas.tag_bind("progressbar", "<ButtonPress-1>", self.press, add=True)
+        # canvas.tag_bind("progressbar", "<ButtonRelease-1>", self.release, add=True)
+
         self.shown = False
         self.canvas = canvas
         self.max = _max
@@ -82,7 +86,7 @@ class ProgressBar:
             x1, _, x2, _ = self.get_x1_y1_x2_y2()
             value = int((event.x - x1)/(x2 - x1)*self.max + 0.5)
             self.value = min(max(value, 0), self.max)
-            self.update_progressbar(keep_updating=True)
+            self.update_progressbar(keep_updating=False)
             if self.callback is not None:
                 self.callback(self.value)
         else:

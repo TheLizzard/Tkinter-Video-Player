@@ -28,8 +28,8 @@ RESAMPLE_OPTIONS = {0: Image.NEAREST,
                     5: Image.LANCZOS}
 RESAMPLE = RESAMPLE_OPTIONS[4]
 
-ABOVE = 11
-BELLOW = 6
+ABOVE = 5.1
+BELLOW = 5.1
 FRAMES_DELAY = 20
 
 pygame.init()
@@ -136,10 +136,11 @@ class BasePlayer(tk.Frame):
     def set_up(self, filename:str) -> None:
         self.get_sound(filename)
 
+        self.resized = False
         self.cap = cv2.VideoCapture(filename)
         self.NUMBER_OF_FRAMES = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.BASE_WIDTH = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self.BASE_HEIGHT = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.BASE_WIDTH = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.BASE_HEIGHT = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.FPS = self.cap.get(cv2.CAP_PROP_FPS)
 
         self.progressbar = ProgressBar(self.canvas, self.NUMBER_OF_FRAMES)
@@ -161,7 +162,10 @@ class BasePlayer(tk.Frame):
         """
         Resizes the given `Image.Image` based on `self.width`
         """
-        return image.resize((self.width, self.height), RESAMPLE)
+        if self.resized:
+            return image.resize((self.width, self.height), RESAMPLE)
+        else:
+            return image
 
     def resize(self, width:int=None, height:int=None) -> None:
         """
@@ -182,6 +186,7 @@ class BasePlayer(tk.Frame):
             self.width = int(height/self.BASE_HEIGHT*self.BASE_WIDTH + 0.5)
 
         self.canvas.config(width=self.width, height=self.height)
+        self.resized = not (self.width == self.BASE_WIDTH)
 
     def resize_keep_aspect(self, width:int, height:int) -> None:
         """
@@ -491,6 +496,10 @@ if __name__ == "__main__":
     def fullscreen(event:tk.Event=None) -> None:
         root.fullscreen_button.invoke()
 
+    def default_size(event:tk.Event=None) -> None:
+        player.resize(width=player.BASE_WIDTH)
+        assert not player.resized, "Internal error"
+
     def resized(new_geometry:str) -> None:
         if "x" in new_geometry:
             width, rest = new_geometry.split("x")
@@ -507,6 +516,7 @@ if __name__ == "__main__":
     root.geometry_bindings.append(resized)
     root.title("Video Player")
     root.bind_all("<KeyPress-f>", fullscreen)
+    root.bind_all("<KeyPress-g>", default_size)
 
     player = Player(root, bg="black")
     player.pack(fill="both", expand=True)
