@@ -541,16 +541,14 @@ if __name__ == "__main__":
     def default_size(event:tk.Event=None) -> None:
         player.resize(width=player.BASE_WIDTH)
         assert not player.resized, "Internal error"
+        root.geometry("")
 
     def resized(new_geometry:str) -> None:
+        # If window is resized:
         if "x" in new_geometry:
-            width, rest = new_geometry.split("x")
-            if "+" in rest:
-                height = rest.split("+")[0]
-            else:
-                height = rest
-            if height == 1080:
-                height = 1000
+            player.resize(width=int(width), height=int(height))
+            width = player.winfo_width()
+            height = player.winfo_height()
             player.resize(width=int(width), height=int(height))
 
     root = BetterTk()
