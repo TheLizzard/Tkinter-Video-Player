@@ -69,7 +69,6 @@ class ProgressBar:
                 self.dragging_start_callback()
             self.dragging = True
             self.motion(event)
-            print("Returning break")
             return "break"
 
     def release(self, event:tk.Event) -> None:
@@ -78,7 +77,6 @@ class ProgressBar:
                 self.dragging_end_callback()
             self.dragging = False
             self.check_mouse_pos()
-            print("Returning break")
             return "break"
 
     def motion(self, event:tk.Event) -> None:

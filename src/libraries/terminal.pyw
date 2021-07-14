@@ -151,6 +151,8 @@ class Terminal(tk.Text):
             return None
         data = data.decode()
         data = data.replace("\r\n", "\n").replace("\r", "\n")
+        if data[-1] == "\n":
+            data = data[:-1].rstrip(" ") + "\n"
         if len(data) > 0:
             self.write(data)
 

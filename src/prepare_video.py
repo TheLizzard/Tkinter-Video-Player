@@ -9,6 +9,7 @@ from libraries.terminal import Terminal
 
 
 WIDGET_KWARGS = dict(bg="black", fg="white")
+THREADS = 10
 
 
 class App:
@@ -30,11 +31,19 @@ class App:
         prepare_files = tk.Button(self.root, text="Prepare files", command=self.prepare_files, **WIDGET_KWARGS)
         prepare_files.pack(fill="x")
 
+        self.var = tk.BooleanVar(self.root)
+        check_button = tk.Checkbutton(root, text="Video", variable=self.var,
+                                      relief="flat", activebackground="black",
+                                      activeforeground="white",
+                                      electcolor="black", **WIDGET_KWARGS)
+        # check_button.pack()
+
         clear_button = tk.Button(self.root, text="Clear", command=self.clear_terminal, **WIDGET_KWARGS)
         clear_button.pack(fill="x")
 
-        self.terminal = Terminal(self.root, height=15, width=71,
-                                 keep_only_last_line=True)
+        self.terminal = Terminal(self.root, height=5, width=120,
+                                 keep_only_last_line=True,
+                                 font=("DejaVu Sans Mono", 10))
         self.terminal.pack(fill="both", expand=True)
 
     def clear_terminal(self) -> None:
@@ -81,9 +90,15 @@ class App:
                                 f"{soundfile_pretty_print}\n", tag="error")
 
             pipe = self.terminal.stdout[1]
-            command = f"ffmpeg -y -v 2 -stats " \
+            command = f"ffmpeg -y -v 2 -stats -threads {THREADS} " \
                       f"-i {self.file} -vcodec mpeg1video -acodec " \
                       f"libmp3lame -intra {soundfile}"
+
+            #width = 1826
+            #command = f"ffmpeg -y -v 2 -stats -threads {THREADS} -i " \
+            #          f"{self.file} -vf " \
+            #          f"scale=\"{width}:-1\" {soundfile}.ts"
+
             self.terminal.run(command, self._prepare_files)
             self.update_selected_files()
         else:

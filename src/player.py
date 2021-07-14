@@ -1,6 +1,7 @@
 from tkinter.filedialog import askopenfilename
 from PIL import Image, ImageTk
 from threading import Thread
+from sys import stderr
 import tkinter as tk
 import tempfile
 import pygame
@@ -36,7 +37,7 @@ RESAMPLE_OPTIONS = {0: Image.NEAREST,
                     5: Image.LANCZOS}
 RESAMPLE = RESAMPLE_OPTIONS[4]
 
-ABOVE = 10.1
+ABOVE = 31.1
 BELLOW = 15.1
 FRAMES_DELAY = 20
 
@@ -45,14 +46,15 @@ pygame.init()
 
 STATUS_BAR = True
 STATUS_BAR_FRAME_NUMBER = False
-ALLOWED_SLEEP = True
-RESIZE_ON_SHOW = False
+ALLOWED_SLEEP = False
 
-DEBUGGING = False
+DEBUGGING = True
+PHOTOIMAGE_IN_MAIN = True  # Very, very unstable if it's set to `False`
 PRE_PREPARED_SOUND = True
 
-FRAMES_NOT_LOADED_THRESHOLD = 5 # If we can't load 5 frames in a row pause for:
-TIME_PAUSED = 5000 # milliseconds
+FRAMES_NOT_LOADED_THRESHOLD = 5 # If we can't load `FRAMES_NOT_LOADED_THRESHOLD`
+                                #   frames in a row pause for:
+TIME_PAUSED = 2000              #   `TIME_PAUSED` milliseconds
 
 
 class StatusBar(tk.Frame):
@@ -64,7 +66,8 @@ class StatusBar(tk.Frame):
 
         self._fps = -1
 
-        self.frame_number_label = tk.Label(self, fg=fg, justify="left", **kwargs)
+        self.frame_number_label = tk.Label(self, fg=fg, justify="left",
+                                           **kwargs)
         self.frame_number_label.grid(row=1, column=1, sticky="w")
 
         self.loading_label = tk.Label(self, fg=fg, justify="left", **kwargs)
@@ -73,7 +76,8 @@ class StatusBar(tk.Frame):
         self.time_label = tk.Label(self, fg=fg, justify="left", **kwargs)
         self.time_label.grid(row=1, column=3, sticky="w")
 
-        self.fps_label = tk.Label(self, fg=fg, text="FPS", justify="right", **kwargs)
+        self.fps_label = tk.Label(self, fg=fg, text="FPS", justify="right",
+                                  **kwargs)
         self.fps_label.grid(row=1, column=4, sticky="e")
 
         self.full_length = "00:00:00"
@@ -154,13 +158,14 @@ class BasePlayer(tk.Frame):
 
     def __del__(self) -> None:
         self.close_sounddir()
+        self.cap.release()
 
     def set_up(self, filename:str) -> None:
         self.filename = filename
-        self.get_sound(filename)
+        self.get_sound()
 
         self.resized = False
-        self.cap = cv2.VideoCapture(filename)
+        self.cap = cv2.VideoCapture(self.filename)
         self.NUMBER_OF_FRAMES = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.BASE_WIDTH = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.BASE_HEIGHT = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -170,14 +175,16 @@ class BasePlayer(tk.Frame):
         if STATUS_BAR:
             self.status_bar.set_full_length(self.NUMBER_OF_FRAMES // self.FPS)
 
-    def show_image(self, image:Image.Image) -> None:
-        if RESIZE_ON_SHOW:
-            image = self._resize(image)
-        self.tk_image = ImageTk.PhotoImage(image)
-        self.canvas.delete("image")
-        self.canvas.create_image(self.width/2, self.height/2,
-                                 image=self.tk_image, tags=("image", ))
-        self.canvas.tag_lower("image")
+    def show_image(self, image:(Image.Image or ImageTk.PhotoImage)) -> None:
+        if PHOTOIMAGE_IN_MAIN:
+            image = ImageTk.PhotoImage(image, master=self)
+        self.tk_image = image
+        try:
+            self.canvas.itemconfig(self.image_id, image=self.tk_image)
+        except:
+            self.image_id = self.canvas.create_image(0, 0, anchor="nw",
+                                                     image=self.tk_image,
+                                                     tags=("image", ))
 
     def read_next_frame(self) -> Image.Image:
         _, image_matrix = self.cap.read()
@@ -186,7 +193,8 @@ class BasePlayer(tk.Frame):
 
     def _resize(self, image:Image.Image) -> Image.Image:
         """
-        Resizes the given `Image.Image` based on `self.width`
+        Resizes the given `Image.Image` based on
+        `self.width` and `self.height`
         """
         if self.resized:
             return image.resize((self.width, self.height), RESAMPLE)
@@ -216,8 +224,8 @@ class BasePlayer(tk.Frame):
 
         self.canvas.config(width=self.width, height=self.height)
         self.resized = not (self.width == self.BASE_WIDTH)
-        print(f"[Debug]: Resize {self.width}x{self.height}  \t"\
-              f"resized={self.resized}")
+        stderr.write(f"[Debug]: Resize {self.width}x{self.height}  \t"\
+                     f"resized={self.resized}\n")
 
     def goto_frame_number(self, frame_number:int) -> None:
         """
@@ -225,33 +233,35 @@ class BasePlayer(tk.Frame):
         """
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
 
-    def get_sound(self, filename:str) -> None:
+    def get_sound(self) -> None:
         """
         Saves the sound from the file given in another file. The filename
         for the sound file is:
 
-            if PRE_PREPARED_SOUND:
-                f"tmp/{filename}_sound.mp3"
-            elif DEBUGGING:
-                "tmp/sound.mp3"
+            if PRE_PREPARED_SOUND or DEBUGGING:
+                f"tmp/{self.filename}_sound.mp3"
             else:
                 <BasePlayer>.sounddir.name + "/sound.mp3"
         """
-        if PRE_PREPARED_SOUND:
-            self.soundfile = filename.replace("\\", "/").split("/")[-1]
+        if PRE_PREPARED_SOUND or DEBUGGING:
+            self.soundfile = self.filename.replace("\\", "/").split("/")[-1]
             self.soundfile = f"tmp/{self.soundfile}_sound.mp3"
-            print(self.soundfile)
+            stderr.write("[Debug]: Using this sound file: " \
+                         f"\"{self.soundfile}\"\n")
             assert os.path.isfile(self.soundfile), "Not pre-prepared"
-            return None
-        elif DEBUGGING:
-            self.soundfile = "tmp/sound.mp3"
-            if os.path.isfile(self.soundfile):
-                return None
-        else:
-            self.sounddir = tempfile.TemporaryDirectory()
-            self.soundfile = self.sounddir.name + "/sound.mp3"
 
-        command = f"ffmpeg -i {filename} -vcodec mpeg1video -acodec " \
+            if PRE_PREPARED_SOUND:
+                higher_quality = self.filename.replace("\\", "/").split("/")[-1]
+                higher_quality = f"tmp/{higher_quality}_video.ts"
+                if os.path.isfile(higher_quality):
+                    self.filename = higher_quality
+
+            return None
+
+        self.sounddir = tempfile.TemporaryDirectory()
+        self.soundfile = self.sounddir.name + "/sound.mp3"
+
+        command = f"ffmpeg -i {self.filename} -vcodec mpeg1video -acodec " \
                   f"libmp3lame -intra {self.soundfile}"
         os.system(command)
 
@@ -293,7 +303,7 @@ class Player(BasePlayer):
 
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        self.frames = {}
+        self.clear_frames_cache()
         self.frame_number_shown = 0
         self.last_frame_loaded = -1
         super().focus()
@@ -309,7 +319,10 @@ class Player(BasePlayer):
 
     def clear_frames_cache(self, event:tk.Event=None) -> None:
         self.frames = {}
-        self.changed_frame_shown = True
+        self.change_frame_shown()
+
+    def change_frame_shown(self) -> None:
+        self.changed_frame_shown = dict(main=True)
 
     def left_pressed(self, event:tk.Event=None) -> None:
         now = time.perf_counter()
@@ -317,7 +330,7 @@ class Player(BasePlayer):
         time_delta = now - self.base_timer
         super().sound_goto(time_delta)
         self.frame_number_shown = int(time_delta * self.FPS)
-        self.changed_frame_shown = True
+        self.change_frame_shown()
         self.start_pause_time = now
         self.progressbar.last_mouse_movement = now
         self.progressbar.value = self.frame_number_shown
@@ -326,7 +339,7 @@ class Player(BasePlayer):
                 self.status_bar.frame_number = self.frame_number_shown
             self.status_bar.time = self.frame_number_shown // self.FPS
         self._show_frame_when_paused(self.frame_number_shown)
-        print(f"[Debug]: Calling goto {self.frame_number_shown}")
+        stderr.write(f"[Debug]: Calling goto {self.frame_number_shown}\n")
 
     def right_pressed(self, event:tk.Event=None) -> None:
         self.base_timer -= 5
@@ -338,7 +351,7 @@ class Player(BasePlayer):
         else:
             super().sound_goto(time_delta)
         self.frame_number_shown = int(time_delta * self.FPS)
-        self.changed_frame_shown = True
+        self.change_frame_shown()
         self.start_pause_time = now
         self.progressbar.last_mouse_movement = now
         self.progressbar.value = self.frame_number_shown
@@ -347,18 +360,18 @@ class Player(BasePlayer):
                 self.status_bar.frame_number = self.frame_number_shown
             self.status_bar.time = self.frame_number_shown // self.FPS
         self._show_frame_when_paused(self.frame_number_shown)
-        print(f"[Debug]: Calling goto {self.frame_number_shown}")
+        stderr.write(f"[Debug]: Calling goto {self.frame_number_shown}\n")
 
     def goto(self, frame_number:int) -> None:
         self.frame_number_shown = frame_number
-        self.changed_frame_shown = True
+        self.change_frame_shown()
         self.base_timer = time.perf_counter() - frame_number / self.FPS
         if STATUS_BAR:
             if STATUS_BAR_FRAME_NUMBER:
                 self.status_bar.frame_number = frame_number
             self.status_bar.time = self.frame_number_shown // self.FPS
         self._show_frame_when_paused(frame_number)
-        print(f"[Debug]: Calling goto {self.frame_number_shown}")
+        stderr.write(f"[Debug]: Calling goto {self.frame_number_shown}\n")
 
     def _show_frame_when_paused(self, frame_number) -> None:
         if self.temp_pause_after_id is not None:
@@ -369,7 +382,8 @@ class Player(BasePlayer):
         if frame_number in self.frames:
             super().show_image(self.frames[self.frame_number_shown])
         else:
-            self.temp_pause_after_id = super().after(100, self._show_frame_when_paused, frame_number)
+            f = self._show_frame_when_paused
+            self.temp_pause_after_id = super().after(100, f, frame_number)
 
     def set_up(self, filename:str):
         super().set_up(filename)
@@ -412,7 +426,7 @@ class Player(BasePlayer):
         if not self.playing:
             return False
         self.playing = False
-        self.changed_frame_shown = True
+        self.change_frame_shown()
         self.start_pause_time = time.perf_counter()
         self.progressbar.show(hide=False)
         super().pause_sound()
@@ -439,24 +453,33 @@ class Player(BasePlayer):
             return None
         self.progressbar.value = self.frame_number_shown
 
-        if update_number % 3 == 0:
+        if (update_number - 20) % 500 == 0:
             super().sound_goto(time_delta)
 
         if self.frame_number_shown in self.frames:
             super().show_image(self.frames[self.frame_number_shown])
             self.frames_coundnt_load = 0
             if STATUS_BAR:
+                global ABOVE
                 self.last_5_fps.append(int(1/(now - self.last_updated) + 0.5))
                 self.last_5_fps.pop(0)
-                self.status_bar.fps = int(sum(self.last_5_fps) / 5)
-                self.status_bar.loading = 0
+                fps = int(sum(self.last_5_fps) / 5)
+                self.status_bar.fps = fps
                 self.last_updated = now
+                # If the FPS is high enough we can afford to increase `ABOVE`
+                if fps > 25:
+                    # Add one to `ABOVE` but make sure that it's not >31
+                    # Also make sure it can't go lower than the default `ABOVE`
+                    #   from the min
+                    ABOVE = max(ABOVE, min(ABOVE+1, 31))
+                self.status_bar.loading = 0
         else:
-            print(f"[Debug]: Needing frame number {self.frame_number_shown}")
+            #stderr.write("[Debug]: Needing frame number " \
+            #             f"{self.frame_number_shown}\n")
             self.frames_coundnt_load += 1
             if self.frames_coundnt_load == FRAMES_NOT_LOADED_THRESHOLD:
                 self.pause()
-                print("[Debug]: Paused because can't show frames")
+                stderr.write("[Debug]: Paused because can't show frames\n")
                 super().after(TIME_PAUSED, self.unpause)
             if STATUS_BAR:
                 self.status_bar.loading += 1
@@ -484,26 +507,26 @@ class Player(BasePlayer):
                 del self.frames[frame_number]
         time.sleep(2)
 
-    def sleep_load_frames(self) -> None:
+    def sleep_load_frames(self, tag:str) -> None:
         for i in range(10):
-            if self.changed_frame_shown:
-                print("[Debug]: Stop sleeping")
+            if self.changed_frame_shown[tag]:
+                stderr.write("[Debug]: Stop sleeping\n")
                 return None
             time.sleep(0.01)
 
     def load_frames(self) -> None:
         while self.loading_frames:
-            self.changed_frame_shown = False
+            self.changed_frame_shown["main"] = False
             orig = self.frame_number_shown - 1
             top = min(self.NUMBER_OF_FRAMES, orig + int(ABOVE * self.FPS))
             self._load_frames(orig, top)
-            if (not self.changed_frame_shown) and ALLOWED_SLEEP:
-                self.sleep_load_frames()
+            if (not self.changed_frame_shown["main"]) and ALLOWED_SLEEP:
+                self.sleep_load_frames("main")
 
     def _load_frames(self, orig:int, top:int) -> None:
         for i in range(orig, top):
-            if (self.changed_frame_shown) or (not self.loading_frames):
-                print("[Debug]: Stop loading frames")
+            if (self.changed_frame_shown["main"]) or (not self.loading_frames):
+                stderr.write("[Debug]: Stop loading frames\n")
                 return None
             if i not in self.frames:
                 try:
@@ -513,14 +536,23 @@ class Player(BasePlayer):
 
     def load_frame(self, frame_number) -> None:
         if self.last_frame_loaded + 1 != frame_number:
-            print(f"[Debug]: ({self.last_frame_loaded} => {frame_number})")
+            stderr.write(f"[Debug]: ({self.last_frame_loaded} => " \
+                         f"{frame_number})\n")
             super().goto_frame_number(frame_number)
-
-        pil_image = super().read_next_frame()
-        if not RESIZE_ON_SHOW:
-            pil_image = super()._resize(pil_image)
-        self.frames[frame_number] = pil_image
         self.last_frame_loaded = frame_number
+
+        if not self.loading_frames:
+            return None
+
+        image = super()._resize(super().read_next_frame())
+        if not PHOTOIMAGE_IN_MAIN:
+            self.frames[frame_number] = self.convert_image_to_tk(image)
+        else:
+            self.frames[frame_number] = image
+
+    def convert_image_to_tk(self, image:Image.Image) -> ImageTk.PhotoImage:
+        image.draft("RGB", image.size)
+        return ImageTk.PhotoImage(image)
 
     def destroy(self) -> None:
         self.loading_frames = False
@@ -546,9 +578,9 @@ if __name__ == "__main__":
     def resized(new_geometry:str) -> None:
         # If window is resized:
         if "x" in new_geometry:
-            player.resize(width=int(width), height=int(height))
-            width = player.winfo_width()
-            height = player.winfo_height()
+            player.canvas.update()
+            width = player.canvas.winfo_width()
+            height = player.canvas.winfo_height()
             player.resize(width=int(width), height=int(height))
 
     root = BetterTk()
@@ -559,12 +591,13 @@ if __name__ == "__main__":
 
     player = Player(root, bg="black")
     player.pack(fill="both", expand=True)
+
     if DEBUGGING:
         filepath = "tmp/vid.ts"
     else:
         filetypes = (("Video File", "*.ts;*.mp4"), ("All files", "*.*"))
         filepath = askopenfilename(initialdir=r"D:\videos\pokemon\videos",
-                                   filetypes=filetypes,
+                                   filetypes=filetypes, defaultextension="*.*",
                                    title="Select video file")
     if filepath != "":
         player.set_up(filepath)
@@ -572,5 +605,4 @@ if __name__ == "__main__":
         time.sleep(0.2) # Just to allow some of the frames to be read.
         player.start()
 
-        if not DEBUGGING:
-            root.mainloop()
+        root.mainloop()
